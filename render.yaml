@@ -4,7 +4,7 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt && python -m piper.download_voices en_US-lessac-medium
-    startCommand: python -m piper.http_server -m en_US-lessac-medium --host 0.0.0.0 --port $PORT
+    startCommand: python server.py
     healthCheckPath: /voices
     envVars:
       - key: PYTHON_VERSION
