@@ -9,7 +9,7 @@ Replaces `python -m piper.http_server` and the separate proxy.
   GET  /health, /warm, /voices, /diag
 
 Environment (all optional):
-  MODEL           voice name, default en_US-lessac-medium
+  MODEL           voice name, default en_US-ryan-medium (male); downloaded if missing
   ALLOWED_ORIGIN  default "*" (any website may call this server)
   API_KEY         if set, callers must send header "x-api-key" or ?key=
   MAX_CHARS       default 10000
@@ -18,29 +18,46 @@ Environment (all optional):
 
 import os
 import struct
+import subprocess
+import sys
 import threading
 
 from flask import Flask, Response, jsonify, request
 from piper import PiperVoice, SynthesisConfig
 
-MODEL = os.environ.get("MODEL", "en_US-lessac-medium")
+MODEL = os.environ.get("MODEL", "en_US-ryan-medium")
 ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "*")
 API_KEY = os.environ.get("API_KEY", "")
 MAX_CHARS = int(os.environ.get("MAX_CHARS", "10000"))
 PORT = int(os.environ.get("PORT", "5000"))
 
 
-def find_model(name: str) -> str:
-    """Look for the voice in the project folder and in ./voices."""
-    name = name[:-5] if name.endswith(".onnx") else name
+def _search(name: str):
     for folder in (".", "voices", os.environ.get("VOICE_DIR", ".")):
         path = os.path.join(folder, name + ".onnx")
         if os.path.exists(path):
             return path
-    raise SystemExit(
-        f"Voice '{name}' not found in . or ./voices. "
-        f"Run: python -m piper.download_voices {name}"
+    return None
+
+
+def find_model(name: str) -> str:
+    """Find the voice file; if it is missing, download it into ./voices."""
+    name = name[:-5] if name.endswith(".onnx") else name
+    path = _search(name)
+    if path:
+        return path
+
+    print(f"Voice '{name}' not found, downloading it now...", flush=True)
+    result = subprocess.run(
+        [sys.executable, "-m", "piper.download_voices", name, "--data-dir", "voices"]
     )
+    path = _search(name)
+    if result.returncode != 0 or not path:
+        raise SystemExit(
+            f"Could not find or download voice '{name}'. "
+            f"Check the voice name (see rhasspy.github.io/piper-samples)."
+        )
+    return path
 
 
 MODEL_PATH = find_model(MODEL)
